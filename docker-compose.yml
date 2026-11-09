@@ -1,0 +1,149 @@
+# 전체 서비스 실행: cp .env.example .env (또는 ./scripts/generate-env.sh) 후 docker compose up -d --build
+name: live-broadcast
+
+x-service-env: &service-env
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_USERNAME: livebroadcast
+  DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 를 .env 에 설정하세요}
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 을 .env 에 설정하세요}
+  INTERNAL_API_KEY: ${INTERNAL_API_KEY:?INTERNAL_API_KEY 를 .env 에 설정하세요}
+  TZ: Asia/Seoul
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: livebroadcast
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: livebroadcast
+      TZ: Asia/Seoul
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U livebroadcast"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  auth-service:
+    build:
+      context: .
+      args:
+        MODULE: auth-service
+    restart: unless-stopped
+    environment:
+      <<: *service-env
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      TEST_ACCOUNTS_ENABLED: ${TEST_ACCOUNTS_ENABLED:-true}
+      TEST_ACCOUNT_PASSWORD: ${TEST_ACCOUNT_PASSWORD:-test1234!}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  broadcast-service:
+    build:
+      context: .
+      args:
+        MODULE: broadcast-service
+    restart: unless-stopped
+    environment:
+      <<: *service-env
+      MEDIAMTX_API_URL: http://mediamtx:9997
+      MEDIAMTX_PLAYBACK_URL: http://mediamtx:9996
+      STREAM_STALE_GRACE: ${STREAM_STALE_GRACE:-3m}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  interaction-service:
+    build:
+      context: .
+      args:
+        MODULE: interaction-service
+    restart: unless-stopped
+    environment:
+      <<: *service-env
+      BROADCAST_SERVICE_URL: http://broadcast-service:8082
+      TOSS_CLIENT_KEY: ${TOSS_CLIENT_KEY:-}
+      TOSS_SECRET_KEY: ${TOSS_SECRET_KEY:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  gateway:
+    build:
+      context: .
+      args:
+        MODULE: gateway
+    restart: unless-stopped
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:8081
+      BROADCAST_SERVICE_URL: http://broadcast-service:8082
+      INTERACTION_SERVICE_URL: http://interaction-service:8083
+      JAVA_OPTS: "-Xms64m -Xmx256m -XX:+UseSerialGC"
+      TZ: Asia/Seoul
+    depends_on:
+      - auth-service
+      - broadcast-service
+      - interaction-service
+
+  mediamtx:
+    # -ffmpeg 이미지는 alpine 기반이라 훅 스크립트(sh, wget)를 실행할 수 있다.
+    image: bluenviron/mediamtx:1.15.5-ffmpeg
+    restart: unless-stopped
+    environment:
+      MTX_AUTHHTTPADDRESS: http://broadcast-service:8082/internal/media/auth?key=${INTERNAL_API_KEY}
+      MTX_WEBRTCADDITIONALHOSTS: ${PUBLIC_HOST:-127.0.0.1}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      BROADCAST_HOOK_URL: http://broadcast-service:8082
+    volumes:
+      - ./infra/mediamtx/mediamtx.yml:/mediamtx.yml:ro
+      - ./infra/mediamtx/hooks:/hooks:ro
+      - recordings:/recordings
+    ports:
+      - "8189:8189/udp"
+      - "8189:8189/tcp"
+    depends_on:
+      - broadcast-service
+
+  web:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-http://localhost}
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    depends_on:
+      - gateway
+      - mediamtx
+
+volumes:
+  postgres-data:
+  redis-data:
+  recordings:
+  caddy-data:
+  caddy-config:

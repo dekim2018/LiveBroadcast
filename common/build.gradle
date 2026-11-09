@@ -1,0 +1,11 @@
+apply plugin: 'java-library'
+
+// 각 서비스가 공통으로 사용하는 보안(JWT 검증, 로그아웃 블랙리스트), 예외 응답 모듈
+dependencies {
+    api 'org.springframework.boot:spring-boot-starter-webmvc'
+    api 'org.springframework.boot:spring-boot-starter-validation'
+    api 'org.springframework.boot:spring-boot-starter-security'
+    api 'org.springframework.boot:spring-boot-starter-data-redis'
+    api 'org.springframework.security:spring-security-oauth2-resource-server'
+    api 'org.springframework.security:spring-security-oauth2-jose'
+}

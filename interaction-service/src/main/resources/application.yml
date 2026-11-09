@@ -1,0 +1,47 @@
+server:
+  port: 8083
+  shutdown: graceful
+
+spring:
+  application:
+    name: interaction-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${INTERACTION_DB_NAME:interaction_db}
+    username: ${DB_USERNAME:livebroadcast}
+    password: ${DB_PASSWORD:livebroadcast}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  mvc:
+    async:
+      request-timeout: -1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+services:
+  broadcast-url: ${BROADCAST_SERVICE_URL:http://localhost:8082}
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:local-dev-only-secret-change-me-0123456789abcdef}
+    issuer: live-broadcast
+  internal:
+    api-key: ${INTERNAL_API_KEY:local-dev-internal-key}
+  payment:
+    # 토스페이먼츠 개발자센터에서 발급받은 "테스트" 키를 환경변수로 넣는다.
+    client-key: ${TOSS_CLIENT_KEY:}
+    secret-key: ${TOSS_SECRET_KEY:}
+    api-url: https://api.tosspayments.com
+    min-amount: 1000
+    max-amount: 1000000

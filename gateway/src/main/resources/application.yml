@@ -1,0 +1,18 @@
+server:
+  port: 8080
+  shutdown: graceful
+
+spring:
+  application:
+    name: gateway
+
+services:
+  auth-url: ${AUTH_SERVICE_URL:http://localhost:8081}
+  broadcast-url: ${BROADCAST_SERVICE_URL:http://localhost:8082}
+  interaction-url: ${INTERACTION_SERVICE_URL:http://localhost:8083}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
