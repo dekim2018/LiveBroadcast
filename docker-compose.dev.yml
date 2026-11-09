@@ -1,0 +1,46 @@
+# 로컬 개발용 인프라만 실행한다(백엔드는 IDE/gradle, 프론트는 vite 로 직접 실행).
+#   docker compose -f docker-compose.dev.yml up -d
+# MediaMTX 가 호스트에서 실행 중인 broadcast-service(8082)를 호출할 수 있도록 host.docker.internal 을 사용한다.
+name: live-broadcast-dev
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: livebroadcast
+      POSTGRES_PASSWORD: livebroadcast
+      POSTGRES_DB: livebroadcast
+    volumes:
+      - dev-postgres:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  mediamtx:
+    image: bluenviron/mediamtx:1.15.5-ffmpeg
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      MTX_AUTHHTTPADDRESS: http://host.docker.internal:8082/internal/media/auth?key=local-dev-internal-key
+      MTX_WEBRTCADDITIONALHOSTS: 127.0.0.1
+      INTERNAL_API_KEY: local-dev-internal-key
+      BROADCAST_HOOK_URL: http://host.docker.internal:8082
+    volumes:
+      - ./infra/mediamtx/mediamtx.yml:/mediamtx.yml:ro
+      - ./infra/mediamtx/hooks:/hooks:ro
+      - dev-recordings:/recordings
+    ports:
+      - "8889:8889"
+      - "9996:9996"
+      - "9997:9997"
+      - "8189:8189/udp"
+      - "8189:8189/tcp"
+
+volumes:
+  dev-postgres:
+  dev-recordings:

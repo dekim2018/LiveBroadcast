@@ -1,0 +1,11 @@
+apply plugin: 'org.springframework.boot'
+
+dependencies {
+    implementation 'org.springframework.cloud:spring-cloud-starter-gateway-server-webflux'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+}
+
+// 실행 가능한 bootJar 하나만 만든다(plain jar 생략)
+tasks.named('jar') {
+    enabled = false
+}

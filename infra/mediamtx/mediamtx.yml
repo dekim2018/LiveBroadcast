@@ -1,0 +1,61 @@
+###############################################
+# MediaMTX 설정 (https://github.com/bluenviron/mediamtx, MIT License)
+# 브라우저 WebRTC 만 사용한다: 송출 WHIP, 시청 WHEP
+# 아래 값 중 일부는 docker-compose 의 MTX_* 환경변수로 덮어쓴다.
+###############################################
+
+logLevel: info
+logDestinations: [stdout]
+
+# 송출/시청/녹화재생 요청마다 broadcast-service 에 허용 여부를 묻는다.
+authMethod: http
+authHTTPAddress: http://broadcast-service:8082/internal/media/auth
+authHTTPExclude:
+  - action: api
+  - action: metrics
+  - action: pprof
+
+# Control API: 내부망 전용(방송 종료 시 송출 연결 강제 종료에 사용)
+api: yes
+apiAddress: :9997
+
+metrics: no
+pprof: no
+
+# 녹화 재생 서버: Caddy 가 /playback 으로 프록시
+playback: yes
+playbackAddress: :9996
+
+# 사용하지 않는 프로토콜은 끈다.
+rtsp: no
+rtmp: no
+hls: no
+srt: no
+
+webrtc: yes
+webrtcAddress: :8889
+webrtcEncryption: no
+# 실제 미디어(RTP)는 이 포트로 브라우저와 직접 주고받는다. 서버 방화벽에서 UDP/TCP 8189 를 열어야 한다.
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+webrtcIPsFromInterfaces: yes
+# 서버의 공인 IP 또는 도메인. MTX_WEBRTCADDITIONALHOSTS 환경변수로 넣는다.
+webrtcAdditionalHosts: []
+webrtcICEServers2: []
+
+pathDefaults:
+  # 모든 방송을 자동 녹화한다(다시보기).
+  record: yes
+  recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+  recordFormat: fmp4
+  recordPartDuration: 1s
+  recordSegmentDuration: 1h
+  # 0s: 자동 삭제하지 않음
+  recordDeleteAfter: 0s
+
+paths:
+  # 방송 경로는 live/{방송ID} 형식만 허용한다.
+  '~^live/\d+$':
+    runOnReady: sh /hooks/notify.sh ready
+    runOnNotReady: sh /hooks/notify.sh not-ready
+    runOnRecordSegmentComplete: sh /hooks/notify.sh segment-complete

@@ -1,0 +1,36 @@
+# SITE_ADDRESS
+#   로컬: http://localhost         (HTTPS 없이 실행, localhost 는 브라우저가 보안 컨텍스트로 인정)
+#   운영: live.example.duckdns.org  (Caddy 가 Let's Encrypt 인증서를 자동 발급)
+{$SITE_ADDRESS} {
+	encode gzip
+
+	# REST API -> Spring Cloud Gateway (SSE 를 위해 버퍼링 끔)
+	handle /api/* {
+		reverse_proxy gateway:8080 {
+			flush_interval -1
+		}
+	}
+
+	# WebRTC 시그널링(WHIP/WHEP) -> MediaMTX
+	handle_path /media/* {
+		reverse_proxy mediamtx:8889
+	}
+
+	# 녹화 재생 -> MediaMTX Playback 서버
+	handle_path /playback/* {
+		reverse_proxy mediamtx:9996
+	}
+
+	# Vue SPA
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(self), microphone=(self), display-capture=(self)"
+	}
+}
