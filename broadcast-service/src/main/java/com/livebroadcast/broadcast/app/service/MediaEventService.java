@@ -1,10 +1,12 @@
 package com.livebroadcast.broadcast.app.service;
 
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,12 +16,15 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.livebroadcast.broadcast.app.MediaProperties;
+import com.livebroadcast.broadcast.app.policy.MediaAccessPolicy;
 import com.livebroadcast.broadcast.app.port.in.MediaEventUseCase;
 import com.livebroadcast.broadcast.app.port.out.BroadcastRepositoryPort;
-import com.livebroadcast.broadcast.app.port.out.MediaServerPort;
+import com.livebroadcast.broadcast.app.port.out.DomainEventPublisherPort;
 import com.livebroadcast.broadcast.app.port.out.RecordingRepositoryPort;
 import com.livebroadcast.broadcast.domain.Broadcast;
-import com.livebroadcast.broadcast.domain.Recording;
+import com.livebroadcast.broadcast.domain.event.BroadcastEnded;
+import com.livebroadcast.broadcast.domain.event.BroadcastStreamStarted;
+import com.livebroadcast.broadcast.domain.event.MediaStreamStopped;
 
 @Service
 public class MediaEventService implements MediaEventUseCase {
@@ -28,17 +33,22 @@ public class MediaEventService implements MediaEventUseCase {
 
     private final BroadcastRepositoryPort broadcastRepository;
     private final RecordingRepositoryPort recordingRepository;
-    private final MediaServerPort mediaServer;
+    private final DomainEventPublisherPort events;
+    private final Map<String, MediaAccessPolicy> accessPolicies;
     private final MediaProperties mediaProperties;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
     public MediaEventService(BroadcastRepositoryPort broadcastRepository, RecordingRepositoryPort recordingRepository,
-                             MediaServerPort mediaServer, MediaProperties mediaProperties,
-                             PlatformTransactionManager transactionManager, Clock clock) {
+                             DomainEventPublisherPort events, List<MediaAccessPolicy> accessPolicies,
+                             MediaProperties mediaProperties, PlatformTransactionManager transactionManager,
+                             Clock clock) {
         this.broadcastRepository = broadcastRepository;
         this.recordingRepository = recordingRepository;
-        this.mediaServer = mediaServer;
+        this.events = events;
+        // 같은 action 을 맡는 정책이 둘이면 기동 시점에 실패시킨다.
+        this.accessPolicies = accessPolicies.stream()
+                .collect(Collectors.toUnmodifiableMap(MediaAccessPolicy::action, Function.identity()));
         this.mediaProperties = mediaProperties;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.clock = clock;
@@ -46,26 +56,13 @@ public class MediaEventService implements MediaEventUseCase {
 
     /**
      * MediaMTX 가 송출(publish), 시청(read), 녹화 재생(playback) 요청마다 호출한다.
-     * <ul>
-     *     <li>publish : 방송 중이고, 이번 방송에 발급된 송출 토큰이 일치할 때만 허용</li>
-     *     <li>read    : 방송 중인 방송이면 비로그인 사용자도 허용</li>
-     *     <li>playback: 다시보기 가능한 녹화가 있는 경로만 허용</li>
-     * </ul>
+     * 실제 판단은 action 별 {@link MediaAccessPolicy} 가 하고, 담당 정책이 없는 action 은 거절한다.
      */
     @Override
     @Transactional(readOnly = true)
     public boolean authorize(MediaAuthCommand command) {
-        String action = command.action() == null ? "" : command.action();
-        return switch (action) {
-            case "publish" -> findBroadcast(command.path())
-                    .map(b -> b.canPublishWith(extractToken(command)))
-                    .orElse(false);
-            case "read" -> findBroadcast(command.path())
-                    .map(Broadcast::isWatchable)
-                    .orElse(false);
-            case "playback" -> command.path() != null && recordingRepository.existsReadyByMediaPath(command.path());
-            default -> false;
-        };
+        MediaAccessPolicy policy = command.action() == null ? null : accessPolicies.get(command.action());
+        return policy != null && policy.allows(command);
     }
 
     @Override
@@ -76,10 +73,11 @@ public class MediaEventService implements MediaEventUseCase {
             return;
         }
         broadcastRepository.findByIdForUpdate(id.get()).ifPresent(broadcast -> {
-            broadcast.markStreamOnline(clock.instant());
+            Instant now = clock.instant();
+            broadcast.markStreamOnline(now);
             broadcastRepository.save(broadcast);
-            if (broadcast.isWatchable() && recordingRepository.findActiveByMediaPath(mediaPath).isEmpty()) {
-                recordingRepository.save(Recording.start(broadcast, mediaProperties.recordingRoot(), clock.instant()));
+            if (broadcast.isWatchable()) {
+                events.publish(new BroadcastStreamStarted(broadcast, now));
             }
             log.info("송출 시작 감지 broadcastId={}", broadcast.getId());
         });
@@ -92,15 +90,13 @@ public class MediaEventService implements MediaEventUseCase {
         if (id.isEmpty()) {
             return;
         }
+        Instant now = clock.instant();
         broadcastRepository.findByIdForUpdate(id.get()).ifPresent(broadcast -> {
-            broadcast.markStreamOffline(clock.instant());
+            broadcast.markStreamOffline(now);
             broadcastRepository.save(broadcast);
             log.info("송출 끊김 감지 broadcastId={}", broadcast.getId());
         });
-        recordingRepository.findActiveByMediaPath(mediaPath).ifPresent(recording -> {
-            recording.finish(clock.instant());
-            recordingRepository.save(recording);
-        });
+        events.publish(new MediaStreamStopped(mediaPath, now));
     }
 
     @Override
@@ -135,41 +131,14 @@ public class MediaEventService implements MediaEventUseCase {
 
     private boolean endIfStale(Long id) {
         Broadcast broadcast = broadcastRepository.findByIdForUpdate(id).orElse(null);
-        if (broadcast == null || !broadcast.isStale(clock.instant(), mediaProperties.staleGrace())) {
+        Instant now = clock.instant();
+        if (broadcast == null || !broadcast.isStale(now, mediaProperties.staleGrace())) {
             return false;
         }
-        broadcast.forceEnd(clock.instant());
+        broadcast.forceEnd(now);
         broadcastRepository.save(broadcast);
-        recordingRepository.findActiveByMediaPath(broadcast.mediaPath()).ifPresent(r -> {
-            r.finish(clock.instant());
-            recordingRepository.save(r);
-        });
-        String mediaPath = broadcast.mediaPath();
-        AfterCommit.run(() -> mediaServer.kickPublisher(mediaPath));
+        events.publish(new BroadcastEnded(broadcast.getId(), broadcast.mediaPath(), now));
         log.info("송출이 끊긴 방송 자동 종료 broadcastId={}", id);
         return true;
-    }
-
-    private Optional<Broadcast> findBroadcast(String mediaPath) {
-        return Broadcast.parseMediaPath(mediaPath).flatMap(broadcastRepository::findById);
-    }
-
-    /** WHIP 요청의 Authorization: Bearer, 쿼리스트링 token, 비밀번호 필드 순서로 송출 토큰을 찾는다. */
-    static String extractToken(MediaAuthCommand command) {
-        if (command.token() != null && !command.token().isBlank()) {
-            return command.token();
-        }
-        if (command.query() != null && !command.query().isBlank()) {
-            for (String pair : command.query().split("&")) {
-                int idx = pair.indexOf('=');
-                if (idx > 0 && "token".equals(pair.substring(0, idx))) {
-                    return URLDecoder.decode(pair.substring(idx + 1), StandardCharsets.UTF_8);
-                }
-            }
-        }
-        if (command.password() != null && !command.password().isBlank()) {
-            return command.password();
-        }
-        return null;
     }
 }

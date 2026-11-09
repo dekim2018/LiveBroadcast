@@ -25,6 +25,7 @@ import com.livebroadcast.interaction.app.port.out.DonationRepositoryPort;
 import com.livebroadcast.interaction.app.port.out.PaymentGatewayPort;
 import com.livebroadcast.interaction.domain.broadcast.BroadcastInfo;
 import com.livebroadcast.interaction.domain.donation.Donation;
+import com.livebroadcast.interaction.domain.donation.DonationCompleted;
 import com.livebroadcast.interaction.domain.donation.DonationStatus;
 import com.livebroadcast.interaction.domain.donation.DonationSummary;
 import com.livebroadcast.interaction.domain.donation.PaymentApproval;
@@ -40,7 +41,7 @@ class DonationServiceTest {
 
     private final FakeDonationRepository repository = new FakeDonationRepository();
     private final FakePaymentGateway gateway = new FakePaymentGateway();
-    private final List<String> events = new ArrayList<>();
+    private final List<Object> events = new ArrayList<>();
     private DonationService service;
 
     @BeforeEach
@@ -49,7 +50,7 @@ class DonationServiceTest {
                 repository,
                 id -> Optional.of(new BroadcastInfo(id, STREAMER, "방송자", "방송", "LIVE")),
                 gateway,
-                (broadcastId, name, payload) -> events.add(name),
+                events::add,
                 new PaymentProperties("ck", "sk", null, 1000, 1_000_000),
                 Clock.fixed(Instant.parse("2026-11-10T00:00:00Z"), ZoneOffset.UTC));
     }
@@ -73,7 +74,7 @@ class DonationServiceTest {
 
         assertThat(gateway.confirmCalls.get()).isEqualTo(1);
         assertThat(service.summary(10L).totalAmount()).isEqualTo(5000);
-        assertThat(events.stream().filter("donation.completed"::equals).count()).isEqualTo(1);
+        assertThat(events).filteredOn(DonationCompleted.class::isInstance).hasSize(1);
     }
 
     @Test
@@ -93,6 +94,7 @@ class DonationServiceTest {
         assertThatThrownBy(() -> service.confirm(new ConfirmCommand(DONOR, "pk-1", order.getOrderId(), 5000)))
                 .isInstanceOf(PaymentRejectedException.class);
         assertThat(repository.byOrderId.get(order.getOrderId()).getStatus()).isEqualTo(DonationStatus.FAILED);
+        assertThat(events).isEmpty();
     }
 
     @Test
@@ -117,6 +119,7 @@ class DonationServiceTest {
 
         assertThat(repository.byOrderId.get(order.getOrderId()).getStatus()).isEqualTo(DonationStatus.DONE);
         assertThat(service.summary(10L).totalAmount()).isEqualTo(5000);
+        assertThat(events).filteredOn(DonationCompleted.class::isInstance).hasSize(1);
     }
 
     @Test
