@@ -170,6 +170,20 @@ PUBLIC_HOST=3.35.10.20
 COOKIE_SECURE=true
 ```
 
+### 평가용 테스트 계정 켜기 (평가 기간에만)
+
+원클릭 로그인은 아이디만으로 로그인되므로 기본값은 꺼져 있습니다. 평가 기간에만 켭니다.
+
+```bash
+nano .env
+# TEST_ACCOUNTS_ENABLED=true
+# TEST_ACCOUNT_PASSWORD 는 generate-env.sh 가 만든 무작위 값을 그대로 둔다 (문서, 채팅 등에 적지 않기)
+docker compose up -d auth-service
+```
+
+평가가 끝나면 `TEST_ACCOUNTS_ENABLED=false` 로 바꾸고 같은 명령으로 재시작합니다. 원클릭 로그인이 막히고, 기존 테스트 계정도 비밀번호가 무작위로 바뀌어 로그인할 수 없습니다.
+예전 `.env` 에 `TEST_ACCOUNT_PASSWORD=test1234!` 가 남아 있다면 무작위 값으로 바꾼 뒤 재시작하세요. 재시작할 때 기존 테스트 계정의 비밀번호도 새 값으로 바뀝니다.
+
 ## 7. 실행
 
 ```bash
@@ -188,7 +202,7 @@ docker compose logs -f broadcast-service
 
 ## 8. 배포 후 점검 순서
 
-1. PC 에서 `tester1` 로 로그인 → 방송 만들기 → PC 화면 공유로 방송 시작
+1. PC 에서 `tester1` 로 로그인(원클릭 로그인, `TEST_ACCOUNTS_ENABLED=true` 필요) → 방송 만들기 → PC 화면 공유로 방송 시작
 2. 휴대폰(LTE 로 바꿔서 다른 네트워크에서) 같은 주소 접속 → 방송 시청 확인
 3. 휴대폰에서 `tester2` 로그인 → 새 방송 → 카메라 송출 → PC 에서 시청 확인
 4. 후원 테스트 결제 → 합계 갱신 확인

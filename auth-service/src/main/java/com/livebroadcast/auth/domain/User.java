@@ -36,6 +36,11 @@ public class User {
         return new User(null, username, passwordHash, nickname.strip(), now);
     }
 
+    /** 비밀번호만 바꾼 회원 */
+    public User withPasswordHash(String newPasswordHash) {
+        return new User(id, username, newPasswordHash, nickname, createdAt);
+    }
+
     public Long getId() {
         return id;
     }

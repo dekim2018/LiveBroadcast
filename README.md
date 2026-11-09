@@ -12,15 +12,17 @@
 
 ## 테스트 계정
 
-서버가 처음 뜰 때 테스트 계정 두 개가 자동으로 만들어집니다.
-로그인 화면 아래 **평가용 테스트 계정으로 바로 로그인** 버튼을 누르면 비밀번호 입력 없이 바로 로그인됩니다.
+평가 기간에는 서비스 로그인 화면 아래 **평가용 테스트 계정으로 바로 로그인** 버튼으로 비밀번호 입력 없이 로그인할 수 있습니다.
 
-| 아이디 | 비밀번호 | 닉네임 | 용도 |
-| --- | --- | --- | --- |
-| `tester1` | `test1234!` | 테스터1 | 방송 소유자 역할 |
-| `tester2` | `test1234!` | 테스터2 | 다른 사용자 역할 (권한 거절 확인, 후원) |
+| 아이디 | 닉네임 | 용도 |
+| --- | --- | --- |
+| `tester1` | 테스터1 | 방송 소유자 역할 |
+| `tester2` | 테스터2 | 다른 사용자 역할 (권한 거절 확인, 후원) |
 
-> 비밀번호는 `.env` 의 `TEST_ACCOUNT_PASSWORD` 로 바꿀 수 있고, `TEST_ACCOUNTS_ENABLED=false` 로 기능 자체를 끌 수 있습니다.
+> 원클릭 로그인은 아이디만으로 로그인되므로 기본값은 꺼져 있습니다(`TEST_ACCOUNTS_ENABLED=false`).
+> 직접 실행할 때는 `.env` 에서 `TEST_ACCOUNTS_ENABLED=true` 로 켜면 서버 기동 시 두 계정이 만들어집니다.
+> 비밀번호는 `scripts/generate-env.sh` 가 무작위로 만들어 `.env` 의 `TEST_ACCOUNT_PASSWORD` 에만 저장하며, 문서에는 적지 않습니다.
+> 평가가 끝나면 `TEST_ACCOUNTS_ENABLED=false` 로 바꾸고 `docker compose up -d auth-service` 로 재시작해 끕니다. 끄면 원클릭 로그인이 막히고, 이미 만들어진 테스트 계정도 비밀번호가 무작위로 바뀌어 로그인할 수 없습니다.
 
 ## 구현 범위
 
@@ -204,8 +206,8 @@ POSTGRES_PASSWORD=<랜덤>
 JWT_SECRET=<32바이트 이상 랜덤>
 INTERNAL_API_KEY=<랜덤>
 
-TEST_ACCOUNTS_ENABLED=true
-TEST_ACCOUNT_PASSWORD=test1234!
+TEST_ACCOUNTS_ENABLED=false               # 평가 기간에만 true (원클릭 로그인 공개)
+TEST_ACCOUNT_PASSWORD=<랜덤>               # 비우면 무작위 비밀번호, 원클릭 로그인만 가능
 
 TOSS_CLIENT_KEY=test_ck_...           # 토스페이먼츠 개발자센터 > API 키 > API 개별 연동 키(테스트)
 TOSS_SECRET_KEY=test_sk_...
@@ -219,6 +221,8 @@ STREAM_STALE_GRACE=3m
 | `PUBLIC_HOST` | MediaMTX 가 브라우저에 알려줄 WebRTC 후보 주소 |
 | `JWT_SECRET` | 모든 서비스가 공유하는 HS256 서명 키 |
 | `INTERNAL_API_KEY` | 서비스 간 내부 API, MediaMTX 훅 인증 키 |
+| `TEST_ACCOUNTS_ENABLED` | 평가용 테스트 계정과 원클릭 로그인. 아이디만으로 로그인되므로 평가 기간에만 켬 |
+| `TEST_ACCOUNT_PASSWORD` | 테스트 계정 비밀번호. 바꾸면 재시작할 때 기존 테스트 계정 비밀번호도 바뀜 |
 | `TOSS_*` | 토스페이먼츠 테스트 키. 비어 있으면 후원 버튼이 비활성화됨 |
 
 실제 비밀 값이 들어간 `.env` 는 `.gitignore` 에 포함되어 있어 커밋되지 않습니다.
