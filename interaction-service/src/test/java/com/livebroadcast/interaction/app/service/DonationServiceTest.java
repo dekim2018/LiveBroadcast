@@ -96,6 +96,30 @@ class DonationServiceTest {
     }
 
     @Test
+    void 실패한_주문은_결제사에_다시_승인을_요청하지_않는다() {
+        Donation order = service.createOrder(new CreateOrderCommand(10L, DONOR, "시청자", 5000, ""));
+        gateway.reject = true;
+        ConfirmCommand confirm = new ConfirmCommand(DONOR, "pk-1", order.getOrderId(), 5000);
+        assertThatThrownBy(() -> service.confirm(confirm)).isInstanceOf(PaymentRejectedException.class);
+
+        gateway.reject = false;
+        assertThatThrownBy(() -> service.confirm(confirm)).hasMessageContaining("이미 실패했거나 취소된");
+        assertThat(gateway.confirmCalls.get()).isEqualTo(1);
+    }
+
+    @Test
+    void 실패한_주문이라도_결제사가_결제_완료를_알려오면_적립한다() {
+        Donation order = service.createOrder(new CreateOrderCommand(10L, DONOR, "시청자", 5000, ""));
+        service.cancel(order.getOrderId(), DONOR, null);
+        gateway.approved.put("pk-1", new PaymentApproval("pk-1", order.getOrderId(), "DONE", 5000, Instant.now()));
+
+        service.handleWebhook("pk-1", order.getOrderId());
+
+        assertThat(repository.byOrderId.get(order.getOrderId()).getStatus()).isEqualTo(DonationStatus.DONE);
+        assertThat(service.summary(10L).totalAmount()).isEqualTo(5000);
+    }
+
+    @Test
     void 다른_사용자는_남의_주문을_승인할_수_없다() {
         Donation order = service.createOrder(new CreateOrderCommand(10L, DONOR, "시청자", 5000, ""));
 

@@ -79,6 +79,19 @@ public class Donation {
         }
     }
 
+    /**
+     * 결제사에 승인을 요청해도 되는 주문인지 확인한다.
+     * 이미 실패/취소된 주문을 결제사에 승인 요청하면 실제 결제는 되는데 적립은 안 되므로, 호출 전에 막는다.
+     */
+    public void ensureConfirmable() {
+        if (status == DonationStatus.DONE) {
+            throw DonationErrors.differentPayment();
+        }
+        if (status != DonationStatus.PENDING) {
+            throw DonationErrors.alreadyClosed();
+        }
+    }
+
     /** 이미 같은 결제로 확정된 주문이면 true (중복 승인 통지) */
     public boolean isAlreadyApprovedWith(String key) {
         return status == DonationStatus.DONE && Objects.equals(paymentKey, key);
@@ -90,13 +103,25 @@ public class Donation {
      * @return 이번 호출로 새로 확정되었으면 true, 이미 같은 결제로 확정된 상태면 false
      */
     public boolean approve(PaymentApproval approval, Instant now) {
+        return approve(approval, now, false);
+    }
+
+    /**
+     * 결제사가 결제 완료라고 알려온 경우(웹훅)의 확정. 결제사 기준으로 돈이 실제로 빠져나갔으므로
+     * 우리 쪽에서 먼저 실패/취소 처리한 주문이어도 적립한다.
+     */
+    public boolean reconcile(PaymentApproval approval, Instant now) {
+        return approve(approval, now, true);
+    }
+
+    private boolean approve(PaymentApproval approval, Instant now, boolean allowClosed) {
         if (status == DonationStatus.DONE) {
             if (Objects.equals(paymentKey, approval.paymentKey())) {
                 return false;
             }
             throw DonationErrors.differentPayment();
         }
-        if (status != DonationStatus.PENDING) {
+        if (status != DonationStatus.PENDING && !allowClosed) {
             throw DonationErrors.alreadyClosed();
         }
         if (!orderId.equals(approval.orderId())) {

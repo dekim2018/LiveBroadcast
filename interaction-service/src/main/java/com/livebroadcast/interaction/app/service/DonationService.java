@@ -20,6 +20,7 @@ import com.livebroadcast.interaction.app.port.out.PaymentGatewayPort;
 import com.livebroadcast.interaction.domain.broadcast.BroadcastInfo;
 import com.livebroadcast.interaction.domain.donation.Donation;
 import com.livebroadcast.interaction.domain.donation.DonationErrors;
+import com.livebroadcast.interaction.domain.donation.DonationStatus;
 import com.livebroadcast.interaction.domain.donation.DonationSummary;
 import com.livebroadcast.interaction.domain.donation.PaymentApproval;
 import com.livebroadcast.interaction.domain.donation.PaymentRejectedException;
@@ -76,6 +77,7 @@ public class DonationService implements DonationUseCase {
         if (donation.isAlreadyApprovedWith(command.paymentKey())) {
             return donation;
         }
+        donation.ensureConfirmable();
         donation.ensureRequestedAmount(command.amount());
 
         PaymentApproval approval;
@@ -86,7 +88,7 @@ public class DonationService implements DonationUseCase {
             donationRepository.save(donation);
             throw e;
         }
-        return applyApproval(donation, approval);
+        return applyApproval(donation, approval, false);
     }
 
     @Override
@@ -108,12 +110,21 @@ public class DonationService implements DonationUseCase {
         if (donation == null || donation.isAlreadyApprovedWith(paymentKey)) {
             return;
         }
+        if (donation.getStatus() == DonationStatus.DONE) {
+            // 오류로 응답하면 결제사가 같은 웹훅을 계속 재전송하므로, 기록만 남기고 정상 응답한다.
+            log.warn("이미 다른 결제로 확정된 주문의 웹훅 orderId={} paymentKey={}", orderId, paymentKey);
+            return;
+        }
         PaymentApproval approval = paymentGateway.fetch(paymentKey);
         if (!approval.isDone()) {
             log.info("웹훅 수신, 아직 승인되지 않은 결제 orderId={} status={}", orderId, approval.status());
             return;
         }
-        applyApproval(donation, approval);
+        if (donation.getStatus() != DonationStatus.PENDING) {
+            log.warn("실패/취소된 주문의 결제 완료 웹훅, 결제사 기준으로 적립 orderId={} status={}",
+                    orderId, donation.getStatus());
+        }
+        applyApproval(donation, approval, true);
     }
 
     @Override
@@ -129,8 +140,10 @@ public class DonationService implements DonationUseCase {
         return donationRepository.summarize(broadcastId);
     }
 
-    private Donation applyApproval(Donation donation, PaymentApproval approval) {
-        boolean newlyApproved = donation.approve(approval, clock.instant());
+    private Donation applyApproval(Donation donation, PaymentApproval approval, boolean fromWebhook) {
+        boolean newlyApproved = fromWebhook
+                ? donation.reconcile(approval, clock.instant())
+                : donation.approve(approval, clock.instant());
         Donation saved = donationRepository.save(donation);
         if (newlyApproved) {
             log.info("후원 확정 orderId={} amount={} broadcastId={}", saved.getOrderId(), saved.getAmount(),

@@ -39,6 +39,10 @@ public final class BroadcastErrors {
         return DomainException.notFound("RECORDING_NOT_FOUND", "녹화 영상을 찾을 수 없습니다.");
     }
 
+    public static DomainException recordingInProgress() {
+        return DomainException.conflict("RECORDING_IN_PROGRESS", "녹화 중인 영상은 삭제할 수 없습니다. 먼저 송출을 종료해 주세요.");
+    }
+
     public static DomainException notRecordingOwner() {
         return DomainException.forbidden("NOT_RECORDING_OWNER", "녹화 영상 소유자만 삭제할 수 있습니다.");
     }

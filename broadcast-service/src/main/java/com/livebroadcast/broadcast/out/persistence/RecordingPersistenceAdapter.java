@@ -1,5 +1,6 @@
 package com.livebroadcast.broadcast.out.persistence;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -41,6 +42,12 @@ public class RecordingPersistenceAdapter implements RecordingRepositoryPort {
     @Override
     public Optional<Recording> findActiveByMediaPath(String mediaPath) {
         return repository.findFirstByMediaPathAndStatusOrderByIdDesc(mediaPath, RecordingStatus.RECORDING)
+                .map(RecordingPersistenceAdapter::toDomain);
+    }
+
+    @Override
+    public Optional<Recording> findPrevious(String mediaPath, Instant startedAt) {
+        return repository.findFirstByMediaPathAndStartedAtBeforeOrderByStartedAtDesc(mediaPath, startedAt)
                 .map(RecordingPersistenceAdapter::toDomain);
     }
 

@@ -29,7 +29,13 @@ async function load(more = false) {
   try {
     const res = await commentApi.list(props.broadcastId, { page, size: 50 })
     const items = [...res.content].reverse()
-    comments.value = more ? [...items, ...comments.value] : items
+    if (more) {
+      // 첫 페이지 이후 새 댓글이 쌓이면 다음 페이지가 밀려서 이미 보이는 댓글이 다시 온다.
+      const shown = new Set(comments.value.map((c) => c.id))
+      comments.value = [...items.filter((c) => !shown.has(c.id)), ...comments.value]
+    } else {
+      comments.value = items
+    }
     hasMore.value = res.page + 1 < res.totalPages
     if (!more) scrollToBottom()
   } catch (e) {

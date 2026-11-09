@@ -1,5 +1,6 @@
 package com.livebroadcast.broadcast.out.persistence;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.Optional;
 
@@ -12,6 +13,9 @@ import com.livebroadcast.broadcast.domain.RecordingStatus;
 public interface RecordingJpaRepository extends JpaRepository<RecordingJpaEntity, Long> {
 
     Optional<RecordingJpaEntity> findFirstByMediaPathAndStatusOrderByIdDesc(String mediaPath, RecordingStatus status);
+
+    Optional<RecordingJpaEntity> findFirstByMediaPathAndStartedAtBeforeOrderByStartedAtDesc(String mediaPath,
+                                                                                            Instant startedAt);
 
     Page<RecordingJpaEntity> findByStatusIn(Collection<RecordingStatus> statuses, Pageable pageable);
 

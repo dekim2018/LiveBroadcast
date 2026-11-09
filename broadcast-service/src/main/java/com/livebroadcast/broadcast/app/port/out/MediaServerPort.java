@@ -1,5 +1,6 @@
 package com.livebroadcast.broadcast.app.port.out;
 
+import java.time.Instant;
 import java.util.List;
 
 import com.livebroadcast.broadcast.domain.RecordedSegment;
@@ -11,4 +12,10 @@ public interface MediaServerPort {
 
     /** 미디어 서버에 저장된 녹화 구간 목록 */
     List<RecordedSegment> listRecordedSegments(String mediaPath);
+
+    /**
+     * 시작 시각이 [from, to) 안에 있는 녹화 파일을 미디어 서버에서 지운다.
+     * 하나라도 지우지 못하면 예외를 던진다.
+     */
+    void deleteRecordedSegments(String mediaPath, Instant from, Instant to);
 }

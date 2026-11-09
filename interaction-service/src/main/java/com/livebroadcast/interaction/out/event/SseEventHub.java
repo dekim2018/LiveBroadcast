@@ -29,13 +29,22 @@ public class SseEventHub implements LiveEventPublisherPort {
     private final Map<Long, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
 
     public SseEmitter subscribe(Long broadcastId) {
-        List<SseEmitter> list = emitters.computeIfAbsent(broadcastId, id -> new CopyOnWriteArrayList<>());
         SseEmitter emitter = new SseEmitter(TIMEOUT_MS);
-        if (list.size() >= MAX_SUBSCRIBERS_PER_BROADCAST) {
+        // 추가와 제거를 같은 키에 대한 compute 안에서 해서, 마지막 시청자가 나가며 목록을 지우는 순간에
+        // 새 구독자가 이미 지워진 목록에 들어가 이벤트를 못 받는 경우를 막는다.
+        boolean[] added = {false};
+        emitters.compute(broadcastId, (id, list) -> {
+            List<SseEmitter> current = list == null ? new CopyOnWriteArrayList<>() : list;
+            if (current.size() < MAX_SUBSCRIBERS_PER_BROADCAST) {
+                current.add(emitter);
+                added[0] = true;
+            }
+            return current.isEmpty() ? null : current;
+        });
+        if (!added[0]) {
             emitter.complete();
             return emitter;
         }
-        list.add(emitter);
         Runnable remove = () -> removeEmitter(broadcastId, emitter);
         emitter.onCompletion(remove);
         emitter.onTimeout(remove);
@@ -78,13 +87,10 @@ public class SseEventHub implements LiveEventPublisherPort {
     }
 
     private void removeEmitter(Long broadcastId, SseEmitter emitter) {
-        List<SseEmitter> list = emitters.get(broadcastId);
-        if (list != null) {
+        emitters.computeIfPresent(broadcastId, (id, list) -> {
             list.remove(emitter);
-            if (list.isEmpty()) {
-                emitters.remove(broadcastId, list);
-            }
-        }
+            return list.isEmpty() ? null : list;
+        });
         log.debug("SSE 구독 해제 broadcastId={}", broadcastId);
     }
 }

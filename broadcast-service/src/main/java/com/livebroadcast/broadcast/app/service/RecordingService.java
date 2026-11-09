@@ -22,7 +22,7 @@ import com.livebroadcast.broadcast.domain.RecordingStatus;
 @Service
 public class RecordingService implements RecordingUseCase {
 
-    /** 녹화 시작/종료 시각과 실제 파일 시각 사이의 오차를 흡수하는 여유 시간 */
+    /** 녹화 시작 시각과 실제 파일 시작 시각 사이의 오차를 흡수하는 여유 시간 */
     private static final Duration MARGIN = Duration.ofSeconds(10);
 
     private final RecordingRepositoryPort recordingRepository;
@@ -51,10 +51,9 @@ public class RecordingService implements RecordingUseCase {
         if (recording.getStatus() != RecordingStatus.READY) {
             return new RecordingDetail(recording, List.of());
         }
-        Instant from = recording.getStartedAt().minus(MARGIN);
-        Instant to = recording.getEndedAt().plus(MARGIN);
+        SegmentWindow window = windowOf(recording);
         List<PlaybackSegment> segments = mediaServer.listRecordedSegments(recording.getMediaPath()).stream()
-                .filter(s -> overlaps(s, from, to))
+                .filter(s -> window.contains(s.start()))
                 .map(s -> toPlayback(recording.getMediaPath(), s))
                 .toList();
         return new RecordingDetail(recording, segments);
@@ -66,12 +65,35 @@ public class RecordingService implements RecordingUseCase {
         Recording recording = recordingRepository.findById(recordingId)
                 .orElseThrow(BroadcastErrors::recordingNotFound);
         recording.ensureOwner(requesterId);
+        if (recording.getStatus() == RecordingStatus.RECORDING) {
+            throw BroadcastErrors.recordingInProgress();
+        }
+        // 파일을 먼저 지운다. 행만 지우면 같은 경로의 다른 녹화가 남아 있는 한 공개 재생 API 로 계속 볼 수 있다.
+        SegmentWindow window = windowOf(recording);
+        mediaServer.deleteRecordedSegments(recording.getMediaPath(), window.from(), window.to());
         recordingRepository.delete(recordingId);
     }
 
-    private boolean overlaps(RecordedSegment segment, Instant from, Instant to) {
-        Instant segmentEnd = segment.start().plusMillis((long) (segment.durationSeconds() * 1000));
-        return segment.start().isBefore(to) && segmentEnd.isAfter(from);
+    /**
+     * 이 녹화에 속한 녹화 파일은 시작 시각으로 고른다.
+     * 시작 쪽만 여유를 두고, 직전 녹화가 끝난 시각 이전으로는 넓히지 않는다.
+     * 끝 쪽은 녹화 종료 시각까지만 본다. 끊겼다가 바로 다시 송출해도 다음 녹화의 파일이 섞이지 않는다.
+     */
+    private SegmentWindow windowOf(Recording recording) {
+        Instant from = recording.getStartedAt().minus(MARGIN);
+        Instant previousEnd = recordingRepository.findPrevious(recording.getMediaPath(), recording.getStartedAt())
+                .map(Recording::getEndedAt)
+                .orElse(null);
+        if (previousEnd != null && previousEnd.isAfter(from)) {
+            from = previousEnd;
+        }
+        return new SegmentWindow(from, recording.getEndedAt());
+    }
+
+    private record SegmentWindow(Instant from, Instant to) {
+        boolean contains(Instant start) {
+            return !start.isBefore(from) && start.isBefore(to);
+        }
     }
 
     private PlaybackSegment toPlayback(String mediaPath, RecordedSegment segment) {

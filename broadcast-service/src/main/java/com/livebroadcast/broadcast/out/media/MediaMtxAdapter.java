@@ -2,6 +2,7 @@ package com.livebroadcast.broadcast.out.media;
 
 import java.net.URI;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.List;
@@ -12,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -20,6 +22,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.livebroadcast.broadcast.app.MediaProperties;
 import com.livebroadcast.broadcast.app.port.out.MediaServerPort;
 import com.livebroadcast.broadcast.domain.RecordedSegment;
+import com.livebroadcast.common.error.DomainException;
+import com.livebroadcast.common.error.ErrorType;
 
 /**
  * MediaMTX Control API(v3)와 Playback 서버를 호출하는 아웃바운드 어댑터.
@@ -97,6 +101,50 @@ public class MediaMtxAdapter implements MediaServerPort {
             log.warn("녹화 목록 조회 실패 path={} reason={}", mediaPath, e.getMessage());
             return List.of();
         }
+    }
+
+    @Override
+    public void deleteRecordedSegments(String mediaPath, Instant from, Instant to) {
+        URI listUri = UriComponentsBuilder.fromUriString(properties.apiUrl())
+                .path("/v3/recordings/get/{path}")
+                .buildAndExpand(mediaPath)
+                .encode()
+                .toUri();
+        try {
+            RecordingInfo info = restClient.get().uri(listUri).retrieve().body(RecordingInfo.class);
+            if (info == null || info.segments() == null) {
+                return;
+            }
+            for (SegmentInfo segment : info.segments()) {
+                Instant start = OffsetDateTime.parse(segment.start()).toInstant();
+                if (start.isBefore(from) || !start.isBefore(to)) {
+                    continue;
+                }
+                URI deleteUri = UriComponentsBuilder.fromUriString(properties.apiUrl())
+                        .path("/v3/recordings/deletesegment")
+                        .queryParam("path", mediaPath)
+                        .queryParam("start", segment.start())
+                        .encode()
+                        .build()
+                        .toUri();
+                restClient.delete().uri(deleteUri).retrieve().toBodilessEntity();
+                log.info("녹화 파일 삭제 path={} start={}", mediaPath, segment.start());
+            }
+        } catch (HttpClientErrorException.NotFound e) {
+            // 이 경로에 남은 녹화 파일이 없다.
+        } catch (RestClientException e) {
+            log.warn("녹화 파일 삭제 실패 path={} reason={}", mediaPath, e.getMessage());
+            throw new DomainException(ErrorType.BAD_GATEWAY, "MEDIA_SERVER_ERROR",
+                    "녹화 파일을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record RecordingInfo(String name, List<SegmentInfo> segments) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record SegmentInfo(String start) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
