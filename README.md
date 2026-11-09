@@ -3,26 +3,233 @@
 브라우저만으로 PC 화면 공유 방송과 모바일 카메라 방송을 송출하고, 다른 기기에서 실시간으로 시청할 수 있는 라이브 방송 플랫폼입니다.
 백엔드는 Spring Boot 기반 MSA(Gateway + 3개 서비스), 각 서비스 내부는 헥사고날 구조(app / in / out / domain)로 구성했습니다.
 
+| 심사 안내 | 바로가기 |
+| --- | --- |
+| 서비스 주소 | [서비스 주소](#서비스-주소) |
+| 시연 영상 (PC, 모바일 송출·시청·종료) | [시연 영상](#시연-영상) |
+| 테스트 계정 바로 로그인 | [테스트 계정](#테스트-계정) |
+| 실행 방법 (실행 환경, 환경변수 예시) | [실행 방법](#실행-방법) |
+| 기능 확인 (송출, 시청, 종료, 지원 환경) | [기능 확인 방법](#기능-확인-방법) |
+
 ## 서비스 주소
 
 | 항목 | 값 |
 | --- | --- |
-| 서비스 URL | `https://<배포 도메인>` (배포 후 이 칸을 실제 주소로 바꿔 주세요) |
+| 서비스 URL | ⚠️ **(입력 필요: 실제 접속 URL)** |
 | 배포 가이드 | [docs/DEPLOY.md](docs/DEPLOY.md) |
+
+로그인 없이 방송 목록과 시청이 가능하고, 방송 송출·댓글·후원은 아래 테스트 계정으로 바로 로그인해서 확인할 수 있습니다.
+카메라와 화면 공유는 브라우저 정책상 HTTPS 에서만 동작하므로, 휴대폰 송출은 위 HTTPS 주소로 확인해 주세요.
+
+## 시연 영상
+
+| 시연 | 링크 | 내용 |
+| --- | --- | --- |
+| PC 방송 | ⚠️ **(입력 필요: 영상 링크)** | PC 화면 공유 + 소리 + 마이크 송출 → 다른 기기 시청 → 방송 종료 |
+| 모바일 방송 | ⚠️ **(입력 필요: 영상 링크)** | 휴대폰 카메라 + 마이크 송출 → PC 시청 → 방송 종료 |
 
 ## 테스트 계정
 
-평가 기간에는 서비스 로그인 화면 아래 **평가용 테스트 계정으로 바로 로그인** 버튼으로 비밀번호 입력 없이 로그인할 수 있습니다.
+비밀번호 입력 없이 **원클릭 로그인**으로 바로 사용할 수 있습니다.
 
-| 아이디 | 닉네임 | 용도 |
+1. 서비스 주소 접속 → 오른쪽 위 **로그인**
+2. 로그인 화면 아래 **평가용 테스트 계정으로 바로 로그인** 에서 계정 버튼 클릭
+
+| 버튼 | 아이디 | 용도 |
 | --- | --- | --- |
-| `tester1` | 테스터1 | 방송 소유자 역할 |
-| `tester2` | 테스터2 | 다른 사용자 역할 (권한 거절 확인, 후원) |
+| **테스터1 (tester1)** | `tester1` | 방송 소유자 역할: 방송 만들기, 송출, 종료 |
+| **테스터2 (tester2)** | `tester2` | 다른 사용자 역할: 시청, 댓글, 후원, 남의 방송 수정 거절 확인 |
 
-> 원클릭 로그인은 아이디만으로 로그인되므로 기본값은 꺼져 있습니다(`TEST_ACCOUNTS_ENABLED=false`).
-> 직접 실행할 때는 `.env` 에서 `TEST_ACCOUNTS_ENABLED=true` 로 켜면 서버 기동 시 두 계정이 만들어집니다.
-> 비밀번호는 `scripts/generate-env.sh` 가 무작위로 만들어 `.env` 의 `TEST_ACCOUNT_PASSWORD` 에만 저장하며, 문서에는 적지 않습니다.
-> 평가가 끝나면 `TEST_ACCOUNTS_ENABLED=false` 로 바꾸고 `docker compose up -d auth-service` 로 재시작해 끕니다. 끄면 원클릭 로그인이 막히고, 이미 만들어진 테스트 계정도 비밀번호가 무작위로 바뀌어 로그인할 수 없습니다.
+- 두 기기(또는 일반 창과 시크릿 창)에서 각각 테스터1, 테스터2 로 로그인하면 방송자와 시청자를 동시에 확인할 수 있습니다.
+- 원클릭 로그인 버튼이 보이지 않으면 **회원가입**으로 새 계정을 만들어 같은 기능을 확인할 수 있습니다.
+- API 로 로그인할 때: `POST /api/auth/test-login` 에 `{"username":"tester1"}` ([인증 및 인가 확인](#인증-및-인가-확인) 예시 참고)
+
+> 테스트 계정 비밀번호는 `scripts/generate-env.sh` 가 무작위로 만들어 서버의 `.env` 에만 저장하고 문서에는 적지 않습니다.
+> 원클릭 로그인은 `TEST_ACCOUNTS_ENABLED=true` 일 때만 열리며, 평가가 끝나면 `false` 로 바꾸고 `docker compose up -d auth-service` 로 재시작해 닫습니다.
+> 닫으면 이미 만들어진 테스트 계정도 비밀번호가 무작위로 바뀌어 로그인할 수 없습니다.
+
+## 실행 방법
+
+### 1. 전체 실행 (Docker Compose, 권장)
+
+| 실행 환경 | 내용 |
+| --- | --- |
+| 필수 | Docker 24 이상, Docker Compose v2, 메모리 4GB 이상 (macOS, Windows, Linux) |
+| 포트 | 80, 443 (웹), 8189 UDP/TCP (WebRTC 미디어) |
+| 브라우저 | [지원 환경](#지원-환경) 참고. 카메라/화면 공유는 HTTPS 또는 `localhost` 에서만 동작 |
+
+```bash
+git clone https://github.com/dekim2018/LiveBroadcast.git
+cd LiveBroadcast
+
+# 무작위 비밀 값으로 .env 생성 (로컬). 평가용 테스트 계정(원클릭 로그인)도 켜진 상태로 만들어진다.
+./scripts/generate-env.sh
+# 운영 서버라면: ./scripts/generate-env.sh <도메인> <서버 공인 IP>
+
+# 후원 기능을 쓰려면 .env 에 토스 테스트 키 입력
+#   TOSS_CLIENT_KEY=test_ck_...
+#   TOSS_SECRET_KEY=test_sk_...
+
+docker compose up -d --build
+docker compose logs -f broadcast-service   # 기동 확인
+```
+
+브라우저에서 `http://localhost` 로 접속한 뒤 [테스트 계정](#테스트-계정) 원클릭 로그인으로 확인합니다. 첫 빌드는 Gradle 과 npm 의존성을 받느라 5~10분 정도 걸립니다.
+
+### 2. 환경변수 예시 (`.env`)
+
+```dotenv
+SITE_ADDRESS=http://localhost        # 운영: mylive.duckdns.org (도메인만 적으면 HTTPS 자동)
+PUBLIC_HOST=127.0.0.1                # 운영: 서버 공인 IP (WebRTC 미디어 주소)
+COOKIE_SECURE=false                  # 운영(HTTPS): true
+
+POSTGRES_PASSWORD=<랜덤>
+JWT_SECRET=<32바이트 이상 랜덤>
+INTERNAL_API_KEY=<랜덤>
+
+TEST_ACCOUNTS_ENABLED=true                # 평가용 원클릭 로그인 (generate-env.sh 가 켬, 평가 후 false)
+TEST_ACCOUNT_PASSWORD=<랜덤>               # 비우면 무작위 비밀번호, 원클릭 로그인만 가능
+
+TOSS_CLIENT_KEY=test_ck_...           # 토스페이먼츠 개발자센터 > API 키 > API 개별 연동 키(테스트)
+TOSS_SECRET_KEY=test_sk_...
+
+STREAM_STALE_GRACE=3m
+```
+
+| 변수 | 설명 |
+| --- | --- |
+| `SITE_ADDRESS` | Caddy 사이트 주소. 도메인을 넣으면 Let's Encrypt 인증서를 자동 발급 |
+| `PUBLIC_HOST` | MediaMTX 가 브라우저에 알려줄 WebRTC 후보 주소 |
+| `JWT_SECRET` | 모든 서비스가 공유하는 HS256 서명 키 |
+| `INTERNAL_API_KEY` | 서비스 간 내부 API, MediaMTX 훅 인증 키 |
+| `TEST_ACCOUNTS_ENABLED` | 평가용 테스트 계정과 원클릭 로그인. 아이디만으로 로그인되므로 평가 기간에만 켬 (`.env` 가 없을 때 기본값 false) |
+| `TEST_ACCOUNT_PASSWORD` | 테스트 계정 비밀번호. 바꾸면 재시작할 때 기존 테스트 계정 비밀번호도 바뀜 |
+| `TOSS_*` | 토스페이먼츠 테스트 키. 비어 있으면 후원 버튼이 비활성화됨 |
+
+실제 비밀 값이 들어간 `.env` 는 `.gitignore` 에 포함되어 있어 커밋되지 않습니다.
+
+### 3. 로컬 개발 모드 (IDE 에서 서비스 직접 실행)
+
+```bash
+# 인프라만 실행 (PostgreSQL, Redis, MediaMTX)
+docker compose -f docker-compose.dev.yml up -d
+
+# 백엔드 (JDK 25 필요) - 각각 다른 터미널에서
+./gradlew :auth-service:bootRun
+./gradlew :broadcast-service:bootRun
+./gradlew :interaction-service:bootRun
+./gradlew :gateway:bootRun
+
+# 프론트엔드 (Node 20 이상)
+cd frontend && npm install && npm run dev
+```
+
+`http://localhost:5173` 로 접속합니다. Vite 가 `/api`, `/media`, `/playback` 을 각각 Gateway 와 MediaMTX 로 프록시합니다.
+
+### 4. 테스트
+
+```bash
+./gradlew test
+```
+
+도메인 규칙(상태 전이, 소유자 검증, 송출 토큰, 후원 중복 적립 방지, 금액 검증)을 스프링 컨텍스트 없이 검증합니다.
+
+## 기능 확인 방법
+
+### 지원 환경
+
+| 역할 | 지원 환경 |
+| --- | --- |
+| PC 송출 | Windows/macOS 의 Chrome, Edge 최신 버전 (화면 공유 소리: Chrome 탭 공유는 OS 무관, 전체 화면의 시스템 소리는 Windows Chrome/Edge 지원) |
+| 모바일 송출 | Android Chrome, iOS Safari 최신 버전 (HTTPS 필수) |
+| 시청 | PC 의 Chrome, Edge, Safari, Firefox / Android Chrome / iOS Safari |
+| 네트워크 | 서버 UDP 8189 개방 권장 (막혀 있으면 TCP 8189 로 연결) |
+
+카메라와 화면 공유는 브라우저 정책상 **HTTPS 또는 localhost** 에서만 동작합니다. 휴대폰으로 확인할 때는 배포된 HTTPS 주소를 사용해 주세요.
+
+### PC 방송 송출, 시청, 종료
+
+1. PC 브라우저에서 **테스터1 (tester1)** 원클릭 로그인 → 상단 **방송하기** → 제목 입력 후 **만들고 스튜디오로 이동**
+2. 송출 방식 **PC 화면 공유 + 소리 + 마이크** 선택 → **장치 준비**
+3. 공유 창에서 탭 또는 화면을 고르고 **탭 오디오 공유**(탭) 또는 **시스템 오디오 공유**(전체 화면)를 켭니다. 마이크 권한도 허용합니다.
+4. 미리보기와 `마이크 연결됨, 탭/시스템 소리 포함` 표시 확인 → **방송 시작**
+5. 다른 기기(휴대폰, 다른 브라우저, 시크릿 창)에서 서비스 주소 접속 → 홈의 **방송 중** 목록에서 방송 선택 → 로그인 없이 재생되는지 확인, **소리 켜기**로 탭 소리와 마이크 음성 확인
+6. 스튜디오에서 **방송 종료** → 시청 화면에 "방송이 종료되었습니다" 표시, 목록에서 종료 상태로 이동
+7. 브라우저의 **공유 중지** 버튼을 눌러도 방송이 자동 종료됩니다.
+
+### 모바일 방송 송출, 시청, 종료
+
+1. 휴대폰 브라우저로 HTTPS 서비스 주소 접속 → **테스터1 (tester1)** 원클릭 로그인 → **방송하기**
+2. 송출 방식 **카메라 + 마이크 (모바일)** 이 자동 선택됨 → **장치 준비** → 카메라/마이크 권한 허용
+3. **방송 시작** → 필요하면 **카메라 전환**으로 전면/후면 변경
+4. PC 등 다른 기기에서 방송을 열어 영상과 음성이 실시간으로 나오는지 확인
+5. 휴대폰에서 **방송 종료** → 시청 화면 종료 표시 확인
+
+### 인증 및 인가 확인
+
+| 행위 | 비로그인 | 방송 소유자(tester1) | 다른 사용자(tester2) |
+| --- | --- | --- | --- |
+| 방송 목록, 상세 조회, 시청 | 허용 | 허용 | 허용 |
+| 방송 등록 | 401 (로그인 화면 이동) | 허용 | 허용 (본인 방송) |
+| 방송 수정, 삭제 | 401 | 허용 | 403 `NOT_BROADCAST_OWNER` |
+| 방송 시작, 종료, 송출 토큰 조회 | 401 | 허용 | 403 `NOT_BROADCAST_OWNER` |
+| 미디어 서버에 직접 송출 | 거절 (송출 토큰 없음) | 발급받은 토큰으로만 허용 | 거절 |
+| 댓글 작성 | 401 | 허용 | 허용 |
+| 댓글 수정, 삭제 | 401 | 본인 댓글만 | 본인 댓글만 (타인 댓글 403) |
+| 후원 | 401 | 본인 방송 후원 불가 | 허용 |
+
+API 로 직접 확인하는 예시입니다.
+
+```bash
+BASE=http://localhost
+T1=$(curl -s -X POST $BASE/api/auth/test-login -H 'Content-Type: application/json' -d '{"username":"tester1"}' | sed -E 's/.*"accessToken":"([^"]+)".*/\1/')
+T2=$(curl -s -X POST $BASE/api/auth/test-login -H 'Content-Type: application/json' -d '{"username":"tester2"}' | sed -E 's/.*"accessToken":"([^"]+)".*/\1/')
+
+# tester1 이 방송 생성
+ID=$(curl -s -X POST $BASE/api/broadcasts -H "Authorization: Bearer $T1" -H 'Content-Type: application/json' \
+  -d '{"title":"권한 테스트","description":""}' | sed -E 's/.*"id":([0-9]+).*/\1/')
+
+curl -s -o /dev/null -w "비로그인 생성: %{http_code}\n" -X POST $BASE/api/broadcasts -H 'Content-Type: application/json' -d '{"title":"x"}'
+curl -s -o /dev/null -w "타인 수정: %{http_code}\n" -X PATCH $BASE/api/broadcasts/$ID -H "Authorization: Bearer $T2" -H 'Content-Type: application/json' -d '{"title":"hack"}'
+curl -s -o /dev/null -w "타인 송출 시작: %{http_code}\n" -X POST $BASE/api/broadcasts/$ID/live/start -H "Authorization: Bearer $T2" -H 'Content-Type: application/json' -d '{"sourceType":"PC_SCREEN"}'
+curl -s -o /dev/null -w "소유자 수정: %{http_code}\n" -X PATCH $BASE/api/broadcasts/$ID -H "Authorization: Bearer $T1" -H 'Content-Type: application/json' -d '{"title":"수정됨"}'
+curl -s -o /dev/null -w "비로그인 목록: %{http_code}\n" $BASE/api/broadcasts
+```
+
+예상 결과: `401`, `403`, `403`, `200`, `200`
+
+### 댓글
+
+시청 화면 오른쪽 채팅에서 작성합니다. 다른 기기에서 같은 방송을 열어 두면 새 댓글, 수정, 삭제가 새로고침 없이 반영됩니다(SSE). 본인 댓글에만 수정/삭제 버튼이 보이며, API 로 남의 댓글을 수정하면 403 이 응답됩니다.
+
+### 도네이션 (토스페이먼츠 테스트 모드)
+
+1. `tester2` 로 로그인 → `tester1` 의 방송 시청 화면 → 후원 금액 선택(1,000원 ~ 1,000,000원)과 메시지 입력 → **후원하기**
+2. 토스 결제창에서 아무 카드사나 선택해 테스트 결제를 진행합니다(실제 출금 없음).
+3. 성공 페이지에서 서버가 토스 승인 API 를 호출하고 승인 결과, 금액, 주문번호를 검증한 뒤 후원을 확정합니다.
+4. 방송 화면의 후원 합계와 내역이 실시간으로 갱신됩니다.
+5. 성공 페이지를 새로고침하거나 같은 승인 요청을 다시 보내도 합계는 한 번만 늘어납니다.
+
+중복 적립 방지는 세 겹으로 처리했습니다.
+
+- 주문 행을 `SELECT ... FOR UPDATE` 로 잠그고, 이미 같은 `paymentKey` 로 확정된 주문은 결제사를 다시 호출하지 않고 그대로 응답
+- `order_id`, `payment_key` 유니크 제약
+- 토스 승인 API 에 `Idempotency-Key: orderId` 헤더 전송, `ALREADY_PROCESSED_PAYMENT` 응답 시 결제 조회 API 로 재검증
+
+토스 개발자센터에 웹훅 URL `https://<도메인>/api/donations/webhook` (`PAYMENT_STATUS_CHANGED`)을 등록하면, 브라우저가 성공 페이지로 돌아오지 못한 경우에도 서버가 결제사에 다시 조회해서 확정합니다.
+
+### 녹화 및 다시보기
+
+방송을 송출하면 MediaMTX 가 자동으로 녹화합니다. 방송이 끝나면 상단 **다시보기** 메뉴와 방송 상세 화면에 녹화 영상이 나타나고, 상세 화면에서 바로 재생할 수 있습니다. 녹화 메타데이터(방송 정보, 미디어 경로, 저장 위치, 시작/종료 시각, 세그먼트 수)는 DB 에 저장되어 서버를 재시작해도 그대로 조회됩니다. 실제 파일은 `recordings` 도커 볼륨의 `/recordings/live/{방송ID}/` 에 저장됩니다.
+
+### 서버 재시작 후 데이터 유지 확인
+
+```bash
+docker compose restart
+# 또는 docker compose down && docker compose up -d  (볼륨은 유지됨)
+```
+
+재시작 후에도 방송 목록, 댓글, 후원 내역, 녹화 목록이 그대로 조회됩니다.
 
 ## 구현 범위
 
@@ -170,185 +377,6 @@ com.livebroadcast.broadcast
 ```
 
 도메인 모델은 JPA 엔티티와 분리되어 있어 스프링 없이 단위 테스트할 수 있습니다.
-
-## 실행 방법
-
-### 1. 전체 실행 (Docker Compose, 권장)
-
-필요 환경: Docker 24 이상, Docker Compose v2, 메모리 4GB 이상
-
-```bash
-git clone https://github.com/dekim2018/LiveBroadcast.git
-cd LiveBroadcast
-
-# 무작위 비밀 값으로 .env 생성 (로컬)
-./scripts/generate-env.sh
-# 운영 서버라면: ./scripts/generate-env.sh <도메인> <서버 공인 IP>
-
-# 후원 기능을 쓰려면 .env 에 토스 테스트 키 입력
-#   TOSS_CLIENT_KEY=test_ck_...
-#   TOSS_SECRET_KEY=test_sk_...
-
-docker compose up -d --build
-docker compose logs -f broadcast-service   # 기동 확인
-```
-
-브라우저에서 `http://localhost` 로 접속합니다. 첫 빌드는 Gradle 과 npm 의존성을 받느라 5~10분 정도 걸립니다.
-
-### 2. 환경변수 예시 (`.env`)
-
-```dotenv
-SITE_ADDRESS=http://localhost        # 운영: mylive.duckdns.org (도메인만 적으면 HTTPS 자동)
-PUBLIC_HOST=127.0.0.1                # 운영: 서버 공인 IP (WebRTC 미디어 주소)
-COOKIE_SECURE=false                  # 운영(HTTPS): true
-
-POSTGRES_PASSWORD=<랜덤>
-JWT_SECRET=<32바이트 이상 랜덤>
-INTERNAL_API_KEY=<랜덤>
-
-TEST_ACCOUNTS_ENABLED=false               # 평가 기간에만 true (원클릭 로그인 공개)
-TEST_ACCOUNT_PASSWORD=<랜덤>               # 비우면 무작위 비밀번호, 원클릭 로그인만 가능
-
-TOSS_CLIENT_KEY=test_ck_...           # 토스페이먼츠 개발자센터 > API 키 > API 개별 연동 키(테스트)
-TOSS_SECRET_KEY=test_sk_...
-
-STREAM_STALE_GRACE=3m
-```
-
-| 변수 | 설명 |
-| --- | --- |
-| `SITE_ADDRESS` | Caddy 사이트 주소. 도메인을 넣으면 Let's Encrypt 인증서를 자동 발급 |
-| `PUBLIC_HOST` | MediaMTX 가 브라우저에 알려줄 WebRTC 후보 주소 |
-| `JWT_SECRET` | 모든 서비스가 공유하는 HS256 서명 키 |
-| `INTERNAL_API_KEY` | 서비스 간 내부 API, MediaMTX 훅 인증 키 |
-| `TEST_ACCOUNTS_ENABLED` | 평가용 테스트 계정과 원클릭 로그인. 아이디만으로 로그인되므로 평가 기간에만 켬 |
-| `TEST_ACCOUNT_PASSWORD` | 테스트 계정 비밀번호. 바꾸면 재시작할 때 기존 테스트 계정 비밀번호도 바뀜 |
-| `TOSS_*` | 토스페이먼츠 테스트 키. 비어 있으면 후원 버튼이 비활성화됨 |
-
-실제 비밀 값이 들어간 `.env` 는 `.gitignore` 에 포함되어 있어 커밋되지 않습니다.
-
-### 3. 로컬 개발 모드 (IDE 에서 서비스 직접 실행)
-
-```bash
-# 인프라만 실행 (PostgreSQL, Redis, MediaMTX)
-docker compose -f docker-compose.dev.yml up -d
-
-# 백엔드 (JDK 25 필요) - 각각 다른 터미널에서
-./gradlew :auth-service:bootRun
-./gradlew :broadcast-service:bootRun
-./gradlew :interaction-service:bootRun
-./gradlew :gateway:bootRun
-
-# 프론트엔드 (Node 20 이상)
-cd frontend && npm install && npm run dev
-```
-
-`http://localhost:5173` 로 접속합니다. Vite 가 `/api`, `/media`, `/playback` 을 각각 Gateway 와 MediaMTX 로 프록시합니다.
-
-### 4. 테스트
-
-```bash
-./gradlew test
-```
-
-도메인 규칙(상태 전이, 소유자 검증, 송출 토큰, 후원 중복 적립 방지, 금액 검증)을 스프링 컨텍스트 없이 검증합니다.
-
-## 기능 확인 방법
-
-### 지원 환경
-
-| 역할 | 지원 환경 |
-| --- | --- |
-| PC 송출 | Windows/macOS 의 Chrome, Edge 최신 버전 (화면 공유 소리: Chrome 탭 공유는 OS 무관, 전체 화면의 시스템 소리는 Windows Chrome/Edge 지원) |
-| 모바일 송출 | Android Chrome, iOS Safari 최신 버전 (HTTPS 필수) |
-| 시청 | PC 의 Chrome, Edge, Safari, Firefox / Android Chrome / iOS Safari |
-| 네트워크 | 서버 UDP 8189 개방 권장 (막혀 있으면 TCP 8189 로 연결) |
-
-카메라와 화면 공유는 브라우저 정책상 **HTTPS 또는 localhost** 에서만 동작합니다. 휴대폰으로 확인할 때는 배포된 HTTPS 주소를 사용해 주세요.
-
-### PC 방송 송출, 시청, 종료
-
-1. PC 브라우저에서 `tester1` 로 로그인 → 상단 **방송하기** → 제목 입력 후 **만들고 스튜디오로 이동**
-2. 송출 방식 **PC 화면 공유 + 소리 + 마이크** 선택 → **장치 준비**
-3. 공유 창에서 탭 또는 화면을 고르고 **탭 오디오 공유**(탭) 또는 **시스템 오디오 공유**(전체 화면)를 켭니다. 마이크 권한도 허용합니다.
-4. 미리보기와 `마이크 연결됨, 탭/시스템 소리 포함` 표시 확인 → **방송 시작**
-5. 다른 기기(휴대폰, 다른 브라우저, 시크릿 창)에서 서비스 주소 접속 → 홈의 **방송 중** 목록에서 방송 선택 → 로그인 없이 재생되는지 확인, **소리 켜기**로 탭 소리와 마이크 음성 확인
-6. 스튜디오에서 **방송 종료** → 시청 화면에 "방송이 종료되었습니다" 표시, 목록에서 종료 상태로 이동
-7. 브라우저의 **공유 중지** 버튼을 눌러도 방송이 자동 종료됩니다.
-
-### 모바일 방송 송출, 시청, 종료
-
-1. 휴대폰 브라우저로 HTTPS 서비스 주소 접속 → `tester1` 로 로그인 → **방송하기**
-2. 송출 방식 **카메라 + 마이크 (모바일)** 이 자동 선택됨 → **장치 준비** → 카메라/마이크 권한 허용
-3. **방송 시작** → 필요하면 **카메라 전환**으로 전면/후면 변경
-4. PC 등 다른 기기에서 방송을 열어 영상과 음성이 실시간으로 나오는지 확인
-5. 휴대폰에서 **방송 종료** → 시청 화면 종료 표시 확인
-
-### 인증 및 인가 확인
-
-| 행위 | 비로그인 | 방송 소유자(tester1) | 다른 사용자(tester2) |
-| --- | --- | --- | --- |
-| 방송 목록, 상세 조회, 시청 | 허용 | 허용 | 허용 |
-| 방송 등록 | 401 (로그인 화면 이동) | 허용 | 허용 (본인 방송) |
-| 방송 수정, 삭제 | 401 | 허용 | 403 `NOT_BROADCAST_OWNER` |
-| 방송 시작, 종료, 송출 토큰 조회 | 401 | 허용 | 403 `NOT_BROADCAST_OWNER` |
-| 미디어 서버에 직접 송출 | 거절 (송출 토큰 없음) | 발급받은 토큰으로만 허용 | 거절 |
-| 댓글 작성 | 401 | 허용 | 허용 |
-| 댓글 수정, 삭제 | 401 | 본인 댓글만 | 본인 댓글만 (타인 댓글 403) |
-| 후원 | 401 | 본인 방송 후원 불가 | 허용 |
-
-API 로 직접 확인하는 예시입니다.
-
-```bash
-BASE=http://localhost
-T1=$(curl -s -X POST $BASE/api/auth/test-login -H 'Content-Type: application/json' -d '{"username":"tester1"}' | sed -E 's/.*"accessToken":"([^"]+)".*/\1/')
-T2=$(curl -s -X POST $BASE/api/auth/test-login -H 'Content-Type: application/json' -d '{"username":"tester2"}' | sed -E 's/.*"accessToken":"([^"]+)".*/\1/')
-
-# tester1 이 방송 생성
-ID=$(curl -s -X POST $BASE/api/broadcasts -H "Authorization: Bearer $T1" -H 'Content-Type: application/json' \
-  -d '{"title":"권한 테스트","description":""}' | sed -E 's/.*"id":([0-9]+).*/\1/')
-
-curl -s -o /dev/null -w "비로그인 생성: %{http_code}\n" -X POST $BASE/api/broadcasts -H 'Content-Type: application/json' -d '{"title":"x"}'
-curl -s -o /dev/null -w "타인 수정: %{http_code}\n" -X PATCH $BASE/api/broadcasts/$ID -H "Authorization: Bearer $T2" -H 'Content-Type: application/json' -d '{"title":"hack"}'
-curl -s -o /dev/null -w "타인 송출 시작: %{http_code}\n" -X POST $BASE/api/broadcasts/$ID/live/start -H "Authorization: Bearer $T2" -H 'Content-Type: application/json' -d '{"sourceType":"PC_SCREEN"}'
-curl -s -o /dev/null -w "소유자 수정: %{http_code}\n" -X PATCH $BASE/api/broadcasts/$ID -H "Authorization: Bearer $T1" -H 'Content-Type: application/json' -d '{"title":"수정됨"}'
-curl -s -o /dev/null -w "비로그인 목록: %{http_code}\n" $BASE/api/broadcasts
-```
-
-예상 결과: `401`, `403`, `403`, `200`, `200`
-
-### 댓글
-
-시청 화면 오른쪽 채팅에서 작성합니다. 다른 기기에서 같은 방송을 열어 두면 새 댓글, 수정, 삭제가 새로고침 없이 반영됩니다(SSE). 본인 댓글에만 수정/삭제 버튼이 보이며, API 로 남의 댓글을 수정하면 403 이 응답됩니다.
-
-### 도네이션 (토스페이먼츠 테스트 모드)
-
-1. `tester2` 로 로그인 → `tester1` 의 방송 시청 화면 → 후원 금액 선택(1,000원 ~ 1,000,000원)과 메시지 입력 → **후원하기**
-2. 토스 결제창에서 아무 카드사나 선택해 테스트 결제를 진행합니다(실제 출금 없음).
-3. 성공 페이지에서 서버가 토스 승인 API 를 호출하고 승인 결과, 금액, 주문번호를 검증한 뒤 후원을 확정합니다.
-4. 방송 화면의 후원 합계와 내역이 실시간으로 갱신됩니다.
-5. 성공 페이지를 새로고침하거나 같은 승인 요청을 다시 보내도 합계는 한 번만 늘어납니다.
-
-중복 적립 방지는 세 겹으로 처리했습니다.
-
-- 주문 행을 `SELECT ... FOR UPDATE` 로 잠그고, 이미 같은 `paymentKey` 로 확정된 주문은 결제사를 다시 호출하지 않고 그대로 응답
-- `order_id`, `payment_key` 유니크 제약
-- 토스 승인 API 에 `Idempotency-Key: orderId` 헤더 전송, `ALREADY_PROCESSED_PAYMENT` 응답 시 결제 조회 API 로 재검증
-
-토스 개발자센터에 웹훅 URL `https://<도메인>/api/donations/webhook` (`PAYMENT_STATUS_CHANGED`)을 등록하면, 브라우저가 성공 페이지로 돌아오지 못한 경우에도 서버가 결제사에 다시 조회해서 확정합니다.
-
-### 녹화 및 다시보기
-
-방송을 송출하면 MediaMTX 가 자동으로 녹화합니다. 방송이 끝나면 상단 **다시보기** 메뉴와 방송 상세 화면에 녹화 영상이 나타나고, 상세 화면에서 바로 재생할 수 있습니다. 녹화 메타데이터(방송 정보, 미디어 경로, 저장 위치, 시작/종료 시각, 세그먼트 수)는 DB 에 저장되어 서버를 재시작해도 그대로 조회됩니다. 실제 파일은 `recordings` 도커 볼륨의 `/recordings/live/{방송ID}/` 에 저장됩니다.
-
-### 서버 재시작 후 데이터 유지 확인
-
-```bash
-docker compose restart
-# 또는 docker compose down && docker compose up -d  (볼륨은 유지됨)
-```
-
-재시작 후에도 방송 목록, 댓글, 후원 내역, 녹화 목록이 그대로 조회됩니다.
 
 ## API 요약
 
