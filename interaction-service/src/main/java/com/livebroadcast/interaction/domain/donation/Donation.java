@@ -84,17 +84,17 @@ public class Donation {
      * 이미 실패/취소된 주문을 결제사에 승인 요청하면 실제 결제는 되는데 적립은 안 되므로, 호출 전에 막는다.
      */
     public void ensureConfirmable() {
-        if (status == DonationStatus.DONE) {
+        if (status.isCompleted()) {
             throw DonationErrors.differentPayment();
         }
-        if (status != DonationStatus.PENDING) {
+        if (!status.acceptsConfirmRequest()) {
             throw DonationErrors.alreadyClosed();
         }
     }
 
     /** 이미 같은 결제로 확정된 주문이면 true (중복 승인 통지) */
     public boolean isAlreadyApprovedWith(String key) {
-        return status == DonationStatus.DONE && Objects.equals(paymentKey, key);
+        return status.isCompleted() && Objects.equals(paymentKey, key);
     }
 
     /**
@@ -114,14 +114,15 @@ public class Donation {
         return approve(approval, now, true);
     }
 
-    private boolean approve(PaymentApproval approval, Instant now, boolean allowClosed) {
-        if (status == DonationStatus.DONE) {
+    private boolean approve(PaymentApproval approval, Instant now, boolean fromGateway) {
+        if (status.isCompleted()) {
             if (Objects.equals(paymentKey, approval.paymentKey())) {
                 return false;
             }
             throw DonationErrors.differentPayment();
         }
-        if (status != DonationStatus.PENDING && !allowClosed) {
+        boolean accepted = fromGateway ? status.acceptsGatewayApproval() : status.acceptsConfirmRequest();
+        if (!accepted) {
             throw DonationErrors.alreadyClosed();
         }
         if (!orderId.equals(approval.orderId())) {
@@ -142,7 +143,7 @@ public class Donation {
     }
 
     public void fail(String reason, Instant now) {
-        if (status != DonationStatus.PENDING) {
+        if (!status.canFail()) {
             return;
         }
         this.status = DonationStatus.FAILED;

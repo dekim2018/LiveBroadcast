@@ -17,7 +17,6 @@ import com.livebroadcast.broadcast.app.port.out.RecordingRepositoryPort;
 import com.livebroadcast.broadcast.domain.BroadcastErrors;
 import com.livebroadcast.broadcast.domain.RecordedSegment;
 import com.livebroadcast.broadcast.domain.Recording;
-import com.livebroadcast.broadcast.domain.RecordingStatus;
 
 @Service
 public class RecordingService implements RecordingUseCase {
@@ -48,7 +47,7 @@ public class RecordingService implements RecordingUseCase {
     public RecordingDetail get(Long recordingId) {
         Recording recording = recordingRepository.findById(recordingId)
                 .orElseThrow(BroadcastErrors::recordingNotFound);
-        if (recording.getStatus() != RecordingStatus.READY) {
+        if (!recording.getStatus().isPlayable()) {
             return new RecordingDetail(recording, List.of());
         }
         SegmentWindow window = windowOf(recording);
@@ -65,7 +64,7 @@ public class RecordingService implements RecordingUseCase {
         Recording recording = recordingRepository.findById(recordingId)
                 .orElseThrow(BroadcastErrors::recordingNotFound);
         recording.ensureOwner(requesterId);
-        if (recording.getStatus() == RecordingStatus.RECORDING) {
+        if (recording.getStatus().isInProgress()) {
             throw BroadcastErrors.recordingInProgress();
         }
         // 파일을 먼저 지운다. 행만 지우면 같은 경로의 다른 녹화가 남아 있는 한 공개 재생 API 로 계속 볼 수 있다.

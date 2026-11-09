@@ -9,18 +9,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.livebroadcast.common.error.DomainException;
-import com.livebroadcast.interaction.app.AfterCommit;
 import com.livebroadcast.interaction.app.PageResult;
 import com.livebroadcast.interaction.app.PaymentProperties;
 import com.livebroadcast.interaction.app.port.in.DonationUseCase;
 import com.livebroadcast.interaction.app.port.out.BroadcastQueryPort;
+import com.livebroadcast.interaction.app.port.out.DomainEventPublisherPort;
 import com.livebroadcast.interaction.app.port.out.DonationRepositoryPort;
-import com.livebroadcast.interaction.app.port.out.LiveEventPublisherPort;
 import com.livebroadcast.interaction.app.port.out.PaymentGatewayPort;
 import com.livebroadcast.interaction.domain.broadcast.BroadcastInfo;
 import com.livebroadcast.interaction.domain.donation.Donation;
+import com.livebroadcast.interaction.domain.donation.DonationCompleted;
 import com.livebroadcast.interaction.domain.donation.DonationErrors;
-import com.livebroadcast.interaction.domain.donation.DonationStatus;
 import com.livebroadcast.interaction.domain.donation.DonationSummary;
 import com.livebroadcast.interaction.domain.donation.PaymentApproval;
 import com.livebroadcast.interaction.domain.donation.PaymentRejectedException;
@@ -33,17 +32,17 @@ public class DonationService implements DonationUseCase {
     private final DonationRepositoryPort donationRepository;
     private final BroadcastQueryPort broadcastQuery;
     private final PaymentGatewayPort paymentGateway;
-    private final LiveEventPublisherPort eventPublisher;
+    private final DomainEventPublisherPort events;
     private final PaymentProperties paymentProperties;
     private final Clock clock;
 
     public DonationService(DonationRepositoryPort donationRepository, BroadcastQueryPort broadcastQuery,
-                           PaymentGatewayPort paymentGateway, LiveEventPublisherPort eventPublisher,
+                           PaymentGatewayPort paymentGateway, DomainEventPublisherPort events,
                            PaymentProperties paymentProperties, Clock clock) {
         this.donationRepository = donationRepository;
         this.broadcastQuery = broadcastQuery;
         this.paymentGateway = paymentGateway;
-        this.eventPublisher = eventPublisher;
+        this.events = events;
         this.paymentProperties = paymentProperties;
         this.clock = clock;
     }
@@ -110,7 +109,7 @@ public class DonationService implements DonationUseCase {
         if (donation == null || donation.isAlreadyApprovedWith(paymentKey)) {
             return;
         }
-        if (donation.getStatus() == DonationStatus.DONE) {
+        if (donation.getStatus().isCompleted()) {
             // 오류로 응답하면 결제사가 같은 웹훅을 계속 재전송하므로, 기록만 남기고 정상 응답한다.
             log.warn("이미 다른 결제로 확정된 주문의 웹훅 orderId={} paymentKey={}", orderId, paymentKey);
             return;
@@ -120,7 +119,7 @@ public class DonationService implements DonationUseCase {
             log.info("웹훅 수신, 아직 승인되지 않은 결제 orderId={} status={}", orderId, approval.status());
             return;
         }
-        if (donation.getStatus() != DonationStatus.PENDING) {
+        if (!donation.getStatus().acceptsConfirmRequest()) {
             log.warn("실패/취소된 주문의 결제 완료 웹훅, 결제사 기준으로 적립 orderId={} status={}",
                     orderId, donation.getStatus());
         }
@@ -148,23 +147,8 @@ public class DonationService implements DonationUseCase {
         if (newlyApproved) {
             log.info("후원 확정 orderId={} amount={} broadcastId={}", saved.getOrderId(), saved.getAmount(),
                     saved.getBroadcastId());
-            Long broadcastId = saved.getBroadcastId();
-            DonationEvent event = DonationEvent.from(saved);
-            // 합계는 같은 트랜잭션 안에서 계산해 두고(조회 시 자동 flush 로 방금 확정된 건도 포함), 커밋 후 전송한다.
-            DonationSummary summary = donationRepository.summarize(broadcastId);
-            AfterCommit.run(() -> {
-                eventPublisher.publish(broadcastId, "donation.completed", event);
-                eventPublisher.publish(broadcastId, "donation.summary", summary);
-            });
+            events.publish(new DonationCompleted(saved));
         }
         return saved;
-    }
-
-    public record DonationEvent(Long id, Long broadcastId, String donorNickname, long amount, String message,
-                                String approvedAt) {
-        static DonationEvent from(Donation d) {
-            return new DonationEvent(d.getId(), d.getBroadcastId(), d.getDonorNickname(), d.getAmount(),
-                    d.getMessage(), d.getApprovedAt() == null ? null : d.getApprovedAt().toString());
-        }
     }
 }

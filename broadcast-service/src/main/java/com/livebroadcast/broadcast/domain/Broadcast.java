@@ -88,7 +88,7 @@ public class Broadcast {
      */
     public void startLive(Long requesterId, SourceType sourceType, String newPublishToken, Instant now) {
         ensureOwner(requesterId);
-        if (status == BroadcastStatus.LIVE) {
+        if (!status.canTransitionTo(BroadcastStatus.LIVE)) {
             throw BroadcastErrors.alreadyLive();
         }
         this.status = BroadcastStatus.LIVE;
@@ -104,7 +104,7 @@ public class Broadcast {
 
     public void endLive(Long requesterId, Instant now) {
         ensureOwner(requesterId);
-        if (status != BroadcastStatus.LIVE) {
+        if (!status.canTransitionTo(BroadcastStatus.ENDED)) {
             throw BroadcastErrors.notLive();
         }
         end(now);
@@ -112,7 +112,7 @@ public class Broadcast {
 
     /** 시스템에 의한 종료(송출 끊김 장기화 등). 방송 중이 아니면 아무것도 하지 않는다. */
     public boolean forceEnd(Instant now) {
-        if (status != BroadcastStatus.LIVE) {
+        if (!status.canTransitionTo(BroadcastStatus.ENDED)) {
             return false;
         }
         end(now);
@@ -131,13 +131,20 @@ public class Broadcast {
 
     public void ensureDeletable(Long requesterId) {
         ensureOwner(requesterId);
-        if (status == BroadcastStatus.LIVE) {
+        if (!status.isDeletable()) {
             throw BroadcastErrors.deleteWhileLive();
         }
     }
 
+    /** 송출 정보 재조회처럼 방송 중에만 할 수 있는 작업 전에 확인한다. */
+    public void ensureOnAir() {
+        if (!status.isOnAir()) {
+            throw BroadcastErrors.notLive();
+        }
+    }
+
     public boolean canPublishWith(String token) {
-        if (status != BroadcastStatus.LIVE || publishToken == null || token == null) {
+        if (!status.isOnAir() || publishToken == null || token == null) {
             return false;
         }
         return MessageDigest.isEqual(
@@ -146,11 +153,11 @@ public class Broadcast {
     }
 
     public boolean isWatchable() {
-        return status == BroadcastStatus.LIVE;
+        return status.isOnAir();
     }
 
     public void markStreamOnline(Instant now) {
-        if (status != BroadcastStatus.LIVE) {
+        if (!status.isOnAir()) {
             return;
         }
         this.streamOnline = true;
@@ -160,7 +167,7 @@ public class Broadcast {
 
     public void markStreamOffline(Instant now) {
         this.streamOnline = false;
-        if (status == BroadcastStatus.LIVE) {
+        if (status.isOnAir()) {
             this.streamOfflineSince = now;
         }
         this.updatedAt = now;
@@ -168,7 +175,7 @@ public class Broadcast {
 
     /** 방송 중인데 송출이 grace 이상 끊겨 있으면 true */
     public boolean isStale(Instant now, Duration grace) {
-        return status == BroadcastStatus.LIVE
+        return status.isOnAir()
                 && !streamOnline
                 && streamOfflineSince != null
                 && streamOfflineSince.plus(grace).isBefore(now);

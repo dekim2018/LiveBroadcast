@@ -5,22 +5,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
 import com.livebroadcast.broadcast.app.MediaProperties;
-import com.livebroadcast.broadcast.app.PageResult;
 import com.livebroadcast.broadcast.app.port.in.RecordingUseCase.PlaybackSegment;
 import com.livebroadcast.broadcast.app.port.out.MediaServerPort;
-import com.livebroadcast.broadcast.app.port.out.RecordingRepositoryPort;
 import com.livebroadcast.broadcast.domain.RecordedSegment;
 import com.livebroadcast.broadcast.domain.Recording;
 import com.livebroadcast.broadcast.domain.RecordingStatus;
+import com.livebroadcast.broadcast.support.FakeRecordingRepository;
 
 /**
  * 같은 방송에서 끊겼다가 바로 다시 송출해 녹화가 둘로 나뉘었을 때, 각 녹화가 자기 파일만 재생/삭제하는지 검증한다.
@@ -92,56 +87,6 @@ class RecordingServiceTest {
         @Override
         public void deleteRecordedSegments(String mediaPath, Instant from, Instant to) {
             segments.removeIf(s -> !s.start().isBefore(from) && s.start().isBefore(to));
-        }
-    }
-
-    static class FakeRecordingRepository implements RecordingRepositoryPort {
-        final Map<Long, Recording> byId = new HashMap<>();
-        long seq;
-
-        @Override
-        public Recording save(Recording r) {
-            Recording saved = new Recording(r.getId() == null ? ++seq : r.getId(), r.getBroadcastId(), r.getOwnerId(),
-                    r.getOwnerNickname(), r.getTitle(), r.getMediaPath(), r.getStorageLocation(), r.getStatus(),
-                    r.getStartedAt(), r.getEndedAt(), r.getDurationSeconds(), r.getSegmentCount(),
-                    r.getLastSegmentPath(), r.getCreatedAt());
-            byId.put(saved.getId(), saved);
-            return saved;
-        }
-
-        @Override
-        public Optional<Recording> findById(Long id) {
-            return Optional.ofNullable(byId.get(id));
-        }
-
-        @Override
-        public Optional<Recording> findActiveByMediaPath(String mediaPath) {
-            return byId.values().stream()
-                    .filter(r -> r.getMediaPath().equals(mediaPath) && r.getStatus() == RecordingStatus.RECORDING)
-                    .findFirst();
-        }
-
-        @Override
-        public Optional<Recording> findPrevious(String mediaPath, Instant startedAt) {
-            return byId.values().stream()
-                    .filter(r -> r.getMediaPath().equals(mediaPath) && r.getStartedAt().isBefore(startedAt))
-                    .max(Comparator.comparing(Recording::getStartedAt));
-        }
-
-        @Override
-        public PageResult<Recording> findVisible(Long broadcastId, int page, int size) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public boolean existsReadyByMediaPath(String mediaPath) {
-            return byId.values().stream()
-                    .anyMatch(r -> r.getMediaPath().equals(mediaPath) && r.getStatus() == RecordingStatus.READY);
-        }
-
-        @Override
-        public void delete(Long id) {
-            byId.remove(id);
         }
     }
 }

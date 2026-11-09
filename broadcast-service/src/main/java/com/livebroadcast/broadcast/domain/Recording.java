@@ -59,7 +59,7 @@ public class Recording {
     }
 
     public void finish(Instant now) {
-        if (status != RecordingStatus.RECORDING) {
+        if (!status.isInProgress()) {
             return;
         }
         this.endedAt = now;
