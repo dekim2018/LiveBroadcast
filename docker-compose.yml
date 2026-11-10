@@ -51,8 +51,8 @@ services:
     environment:
       <<: *service-env
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      TEST_ACCOUNTS_ENABLED: ${TEST_ACCOUNTS_ENABLED:-true}
-      TEST_ACCOUNT_PASSWORD: ${TEST_ACCOUNT_PASSWORD:-test1234!}
+      TEST_ACCOUNTS_ENABLED: ${TEST_ACCOUNTS_ENABLED:-false}
+      TEST_ACCOUNT_PASSWORD: ${TEST_ACCOUNT_PASSWORD:-}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

@@ -38,8 +38,10 @@ app:
   cookie:
     secure: ${COOKIE_SECURE:false}
   test-accounts:
-    enabled: ${TEST_ACCOUNTS_ENABLED:true}
-    password: ${TEST_ACCOUNT_PASSWORD:test1234!}
+    # 원클릭 로그인은 아이디만으로 로그인되므로 기본은 꺼둔다. 평가 기간에만 true 로 켠다.
+    enabled: ${TEST_ACCOUNTS_ENABLED:false}
+    # 비우면 기동할 때마다 무작위 비밀번호를 써서 아이디/비밀번호 로그인은 막힌다(원클릭 로그인만 가능).
+    password: ${TEST_ACCOUNT_PASSWORD:}
     accounts:
       - username: tester1
         nickname: 테스터1

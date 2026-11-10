@@ -1,8 +1,10 @@
 package com.livebroadcast.auth.app.service;
 
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -25,6 +27,8 @@ import com.livebroadcast.common.error.DomainException;
 
 @Service
 public class AuthService implements SignUpUseCase, LoginUseCase, TokenUseCase, UserQueryUseCase {
+
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final UserRepositoryPort userRepository;
     private final PasswordHasherPort passwordHasher;
@@ -128,22 +132,37 @@ public class AuthService implements SignUpUseCase, LoginUseCase, TokenUseCase, U
                 .toList();
     }
 
-    /** 서버 기동 시 테스트 계정이 없으면 만든다. */
+    /**
+     * 서버 기동 시 테스트 계정을 준비한다.
+     * <ul>
+     *     <li>켜짐: 없으면 만들고, 이미 있으면 비밀번호를 현재 설정 값으로 맞춘다.</li>
+     *     <li>꺼짐: 새로 만들지 않고, 이미 있는 계정은 무작위 비밀번호로 바꿔 아이디/비밀번호 로그인까지 막는다.</li>
+     * </ul>
+     */
     @Transactional
     public void ensureTestAccounts() {
-        if (!testAccounts.enabled()) {
-            return;
-        }
+        boolean enabled = testAccounts.enabled();
+        String password = enabled && testAccounts.hasPassword() ? testAccounts.password() : randomPassword();
         for (TestAccountProperties.Account account : testAccounts.accounts()) {
-            if (!userRepository.existsByUsername(account.username())) {
-                userRepository.save(User.register(
-                        account.username(),
-                        passwordHasher.hash(testAccounts.password()),
-                        account.nickname(),
-                        clock.instant()
-                ));
-            }
+            userRepository.findByUsername(account.username()).ifPresentOrElse(
+                    user -> {
+                        if (!passwordHasher.matches(password, user.getPasswordHash())) {
+                            userRepository.save(user.withPasswordHash(passwordHasher.hash(password)));
+                        }
+                    },
+                    () -> {
+                        if (enabled) {
+                            userRepository.save(User.register(account.username(), passwordHasher.hash(password),
+                                    account.nickname(), clock.instant()));
+                        }
+                    });
         }
+    }
+
+    private static String randomPassword() {
+        byte[] bytes = new byte[24];
+        RANDOM.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     private LoginResult issueFor(User user) {
