@@ -30,6 +30,9 @@ sed -i.bak \
   -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(rand 16)|" \
   -e "s|^JWT_SECRET=.*|JWT_SECRET=$(rand 32)|" \
   -e "s|^INTERNAL_API_KEY=.*|INTERNAL_API_KEY=$(rand 24)|" \
+  -e "s|^TEST_ACCOUNTS_ENABLED=.*|TEST_ACCOUNTS_ENABLED=true|" \
+  -e "s|^TEST_ACCOUNT_PASSWORD=.*|TEST_ACCOUNT_PASSWORD=$(rand 12)|" \
   .env
 rm -f .env.bak
 echo ".env 생성 완료. TOSS_CLIENT_KEY, TOSS_SECRET_KEY 는 직접 입력하세요."
+echo "평가용 테스트 계정(원클릭 로그인)이 켜져 있습니다. 평가가 끝나면 TEST_ACCOUNTS_ENABLED=false 로 바꾸고 auth-service 를 재시작하세요."

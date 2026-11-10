@@ -170,6 +170,20 @@ PUBLIC_HOST=3.35.10.20
 COOKIE_SECURE=true
 ```
 
+### 평가용 테스트 계정 (평가 기간에만 켜기)
+
+README 의 원클릭 로그인이 동작해야 평가할 수 있습니다. `generate-env.sh` 로 만든 `.env` 는 이미 켜져 있으니 아래 두 줄만 확인합니다.
+
+```bash
+grep '^TEST_ACCOUNTS_ENABLED' .env    # TEST_ACCOUNTS_ENABLED=true 이어야 함
+# TEST_ACCOUNT_PASSWORD 는 generate-env.sh 가 만든 무작위 값을 그대로 둔다 (문서, 채팅 등에 적지 않기)
+```
+
+`.env` 를 직접 만들었거나 꺼져 있다면 `TEST_ACCOUNTS_ENABLED=true` 로 바꾸고 `docker compose up -d auth-service` 로 재시작합니다.
+
+평가가 끝나면 `TEST_ACCOUNTS_ENABLED=false` 로 바꾸고 같은 명령으로 재시작합니다. 원클릭 로그인이 막히고, 기존 테스트 계정도 비밀번호가 무작위로 바뀌어 로그인할 수 없습니다.
+예전 `.env` 에 `TEST_ACCOUNT_PASSWORD=test1234!` 가 남아 있다면 무작위 값으로 바꾼 뒤 재시작하세요. 재시작할 때 기존 테스트 계정의 비밀번호도 새 값으로 바뀝니다.
+
 ## 7. 실행
 
 ```bash
@@ -188,12 +202,13 @@ docker compose logs -f broadcast-service
 
 ## 8. 배포 후 점검 순서
 
-1. PC 에서 `tester1` 로 로그인 → 방송 만들기 → PC 화면 공유로 방송 시작
-2. 휴대폰(LTE 로 바꿔서 다른 네트워크에서) 같은 주소 접속 → 방송 시청 확인
-3. 휴대폰에서 `tester2` 로그인 → 새 방송 → 카메라 송출 → PC 에서 시청 확인
-4. 후원 테스트 결제 → 합계 갱신 확인
-5. 방송 종료 → **다시보기**에서 녹화 재생 확인
-6. README 의 서비스 주소 칸을 실제 주소로 바꿔서 커밋
+1. 다른 기기에서 `curl https://<도메인>/api/auth/test-accounts` → `tester1`, `tester2` 두 계정이 나오는지 확인 (빈 목록이면 원클릭 로그인이 꺼진 상태)
+2. PC 에서 **테스터1** 원클릭 로그인 → 방송 만들기 → PC 화면 공유로 방송 시작
+3. 휴대폰(LTE 로 바꿔서 다른 네트워크에서) 같은 주소 접속 → 방송 시청 확인
+4. 휴대폰에서 **테스터2** 원클릭 로그인 → 새 방송 → 카메라 송출 → PC 에서 시청 확인
+5. 후원 테스트 결제 → 합계 갱신 확인
+6. 방송 종료 → **다시보기**에서 녹화 재생 확인
+7. README 의 서비스 주소와 시연 영상 링크 칸을 실제 값으로 바꿔서 커밋
 
 ### 토스 웹훅 등록 (선택)
 
